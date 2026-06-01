@@ -1,0 +1,16 @@
+# Source & tooling — only dist/ is shipped
+src/**
+node_modules/**
+*.ts
+tsconfig.json
+tsup.config.ts
+package-lock.json
+.gitignore
+.editorconfig
+
+# Repo docs/dev artifacts
+.claude/**
+.cursor/**
+.git/**
+*.vsix
+.manifest.json
