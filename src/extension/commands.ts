@@ -36,7 +36,10 @@ async function generateRulesCommand(previewOnly: boolean): Promise<void> {
 
   const projectRoot = folder.uri.fsPath
 
-  await vscode.window.withProgress(
+  // Run scan/resolve/generate inside the progress notification, but keep any
+  // user-facing confirmation (diff review, overwrite prompt) OUTSIDE of it.
+  // Otherwise the spinner blocks on a prompt and looks frozen at "N/N".
+  const result = await vscode.window.withProgress(
     { location: vscode.ProgressLocation.Notification, title: 'Generating Cursor rules', cancellable: true },
     async (progress, token) => {
       progress.report({ message: 'Selecting language model…' })
@@ -55,16 +58,20 @@ async function generateRulesCommand(previewOnly: boolean): Promise<void> {
         },
       })
       log(`Scanned ${scan.deps.length} deps → resolved ${project.libs.length} known libs (${backend.label})`)
+      if (token.isCancellationRequested) return undefined
 
-      if (token.isCancellationRequested) return
-
-      if (previewOnly) {
-        await showPreview(rules)
-        return
-      }
-      await applyWithConfirmation(projectRoot, scan, rules, backend.label)
+      progress.report({ message: 'Preparing rule files…' })
+      return { scan, rules, label: backend.label }
     },
   )
+
+  if (!result) return // cancelled
+
+  if (previewOnly) {
+    await showPreview(result.rules)
+    return
+  }
+  await applyWithConfirmation(projectRoot, result.scan, result.rules, result.label)
 }
 
 /**
