@@ -53,6 +53,17 @@ export interface LibKnowledge {
 // Config facts — deterministic, read from config files (Phase 0)
 // ----------------------------------------------------------------------------
 
+export interface TsupConfigInfo {
+  /** Whether tsup.config.ts exists */
+  exists: boolean
+  /** Entry module names (e.g. ["cli", "extension"]) */
+  entries: string[]
+  /** Output formats (e.g. ["esm", "cjs"]) */
+  formats: string[]
+  /** Build target (e.g. "node18") */
+  target?: string
+}
+
 export interface ProjectConfig {
   /** From package.json engines (e.g. { node: ">=18", vscode: "^1.90.0" }) */
   engines?: Record<string, string>
@@ -64,8 +75,14 @@ export interface ProjectConfig {
   tsModuleResolution?: string
   /** tsconfig compilerOptions.target */
   tsTarget?: string
+  /** tsconfig compilerOptions.paths (alias map) */
+  tsconfigPaths?: Record<string, string[]>
   /** Has activationEvents + contributes (VSCode extension) */
   isVscodeExtension: boolean
+  /** .vscodeignore exists */
+  hasVscodeignore: boolean
+  /** tsup.config.ts extracted info */
+  tsupConfig: TsupConfigInfo
 }
 
 // ----------------------------------------------------------------------------
@@ -160,6 +177,8 @@ export interface ProjectMeta {
 export interface ResolvedProject {
   meta: ProjectMeta
   libs: LibKnowledge[]
+  /** Source-code extracted conventions (populated in --deep mode). */
+  conventions?: ProjectConventions
 }
 
 // ----------------------------------------------------------------------------
@@ -190,4 +209,33 @@ export interface ResolveOptions {
   /** Model id — for Cursor CLI use `auto` or an id from `--list-models`. */
   model?: string
   noCache?: boolean
+}
+
+// ============================================================================
+// Inspector types — source-code pattern extraction (Phase 1+)
+// ============================================================================
+
+export type SampleBucket = 'pages' | 'components' | 'hooks' | 'services' | 'layouts' | 'utils'
+
+export interface ProjectPattern {
+  type: string
+  label: string
+  evidence: string[]
+  detail?: string
+}
+
+export interface ProjectConventions {
+  patterns: ProjectPattern[]
+  conventions: Convention[]
+}
+
+export interface Convention {
+  rule: string
+  evidence: string[]
+}
+
+export interface InspectorExtractor {
+  name: string
+  match(languages: string[], projectRoot: string): boolean
+  extract(projectRoot: string, srcDir: string): ProjectConventions
 }

@@ -6,16 +6,17 @@ import type { ChatTransport } from './resolver/llm.js'
 import { skillsProvider } from './resolver/skills-provider.js'
 import { generateRules } from './generators/index.js'
 import { writeManifest } from './manifest.js'
-import type { ResolveOptions, ResolvedProject, RuleFile, ScanResult } from './types.js'
+import { inspect } from './inspector/index.js'
+import { sampleFiles } from './inspector/sampling.js'
+import { enhanceWithLLM } from './inspector/llm.js'
+import type { ProjectConventions, ResolveOptions, ResolvedProject, RuleFile, ScanResult } from './types.js'
 
 export interface RunOptions {
   resolve?: ResolveOptions
-  /** Providers prepended to the resolver chain (e.g. vscode.lm). */
   extraProviders?: KnowledgeProvider[]
-  /** Pre-built transport. If omitted in LLM mode, one is auto-selected. */
   transport?: ChatTransport | null
-  /** LLM progress callback: (resolvedDepCount, totalDepCount). */
   onLlmProgress?: (done: number, total: number) => void
+  deep?: boolean
 }
 
 export interface RunResult {
@@ -61,6 +62,97 @@ export async function run(projectRoot: string, options: RunOptions = {}): Promis
     callerProvidedExtra: options.extraProviders !== undefined,
   })
   const project = await resolver.resolve(scanResult, readProjectName(projectRoot), projectRoot)
+
+  if (options.deep) {
+    // Inspect root src dir if it exists, otherwise each sub-project.
+    const srcDirs: string[] = []
+    if (scanResult.srcDir) {
+      srcDirs.push(scanResult.srcDir)
+    }
+    for (const sp of scanResult.subProjects) {
+      // Each sub-project may have its own src/ — use path relative to root
+      const spSrc = path.join(sp.path, 'src')
+      try {
+        const st = fs.statSync(path.join(projectRoot, spSrc))
+        if (st.isDirectory()) srcDirs.push(spSrc)
+      } catch { /* no src in this sub-project */ }
+    }
+    // Fallback: if still nothing, try a few common names
+    if (srcDirs.length === 0) {
+      for (const dir of ['src', 'app', 'lib']) {
+        try {
+          const st = fs.statSync(path.join(projectRoot, dir))
+          if (st.isDirectory()) { srcDirs.push(dir); break }
+        } catch { /* try next */ }
+      }
+    }
+
+    const allConventions: ProjectConventions = { patterns: [], conventions: [] }
+    const allSampledFiles: string[] = []
+
+    for (const srcDir of srcDirs) {
+      const conv = await inspect(projectRoot, scanResult.languages, srcDir) // AST-only, no LLM
+
+      // Collect patterns + conventions (dedup as before)
+      for (const p of conv.patterns) {
+        if (!allConventions.patterns.some(ex => ex.type === p.type && ex.label === p.label)) {
+          allConventions.patterns.push(p)
+        }
+      }
+      for (const c of conv.conventions) {
+        const existing = allConventions.conventions.find(e => e.rule === c.rule)
+        if (!existing) {
+          allConventions.conventions.push(c)
+        } else {
+          for (const e of c.evidence) {
+            if (!existing.evidence.includes(e)) existing.evidence.push(e)
+          }
+        }
+      }
+
+      // Collect sampled files for potential LLM enhancement
+      const sampling = sampleFiles(projectRoot, srcDir, ['**/*.ts', '**/*.tsx'])
+      allSampledFiles.push(...sampling.all)
+    }
+
+    // Post-process: resolve conflicting export conventions by counting
+    const namedConvention = allConventions.conventions.find(c => c.rule.includes('Prefer named exports'))
+    const defaultConvention = allConventions.conventions.find(c => c.rule.includes('Prefer default exports'))
+    if (namedConvention && defaultConvention) {
+      const namedFiles = namedConvention.evidence.length
+      const defaultFiles = defaultConvention.evidence.length
+      if (namedFiles > defaultFiles) {
+        allConventions.conventions = allConventions.conventions.filter(c => c !== defaultConvention)
+        namedConvention.rule = `Prefer named exports — dominant convention (${namedFiles} source files vs ${defaultFiles} default-exporting files).`
+      } else if (defaultFiles > namedFiles) {
+        allConventions.conventions = allConventions.conventions.filter(c => c !== namedConvention)
+        defaultConvention.rule = `Prefer default exports — dominant convention (${defaultFiles} source files vs ${namedFiles} named-exporting files).`
+      } else {
+        allConventions.conventions = allConventions.conventions.filter(c => c !== namedConvention && c !== defaultConvention)
+        allConventions.conventions.push({
+          rule: 'Mixed export conventions across sub-projects — follow the dominant style of each sub-project.',
+          evidence: [...namedConvention.evidence, ...defaultConvention.evidence],
+        })
+      }
+    }
+
+    // LLM enhancement: aggregate all sub-project data into ONE LLM call
+    if (transport && allSampledFiles.length > 0) {
+      try {
+        const enhanced = await enhanceWithLLM(projectRoot, allConventions, allSampledFiles, transport)
+        if (enhanced.conventions.length > allConventions.conventions.length) {
+          console.warn(`[deep] LLM enhanced: ${allConventions.conventions.length} → ${enhanced.conventions.length} conventions`)
+        }
+        project.conventions = enhanced
+      } catch (err: any) {
+        console.warn(`[deep] LLM enhance failed: ${err.message}`)
+        project.conventions = allConventions
+      }
+    } else {
+      project.conventions = allConventions
+    }
+  }
+
   const rules = generateRules(project)
   return { scan: scanResult, project, rules }
 }

@@ -12,7 +12,7 @@ const TABLE: Partial<Record<Language, Omit<LibKnowledge, 'name' | 'version'>>> =
       'Avoid `any`; prefer `unknown` when the type is truly unknown.',
     ],
     constraints: [],
-    commands: ['tsc --noEmit'],
+    commands: [],
   },
   javascript: {
     displayName: 'JavaScript', category: 'language',

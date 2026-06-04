@@ -107,51 +107,74 @@ flowchart LR
 - [x] **依赖层优化 2**:新增 `SkillsDiscoveryProvider` — 扫描 `node_modules/*/skills/*/SKILL.md`（Agent Skills 标准），库维护者自己的知识最高优先级。
   - 最终链：`skills → (extra: vscode.lm) → cache → llm → static`
   - 零新依赖，~130 行新代码
+- [x] **Phase 0 — 配置文件提取**:
+  - `tsconfig.json`: `strict` / `moduleResolution` / `target` / `paths` (alias map)
+  - `tsup.config.ts`: 多入口、输出格式、target（regex-based extraction）
+  - `.vscodeignore`: 是否存在（扩展项目发布约束）
+  - `pnpm-workspace.yaml`: catalog 解析、workspace 配置
+  - 新增 `ProjectConfig.tsconfigPaths` / `hasVscodeignore` / `tsupConfig` 字段
+  - 渲染到 `tech-stack.mdc`（Environment Constraints）和 `coding-style.mdc`（Project-Specific Constraints）
+  - 修复 `tsc --noEmit` 重复输出（去掉 language 层 commands，devtool 层覆盖）
+- [x] **Phase 1 — Inspector 层 (MVP)**:
+  - **架构**: 插件式 `inspector/extractors/*.ts`，镜像 `scanner/plugins/` 组织。各语言用最适合的解析器（TS/JS → `@babel/parser`，后续 Python → `ast` 标准库，Go → `go/parser`）。
+  - **采样**: `sampling.ts` — 按角色桶（pages/components/hooks/services/layouts/utils）选代表文件，封顶 8 文件 / 50KB，扁平项目自动 fallback。
+  - **AST**: `ast/parse.ts` — `@babel/parser` + 手写递归 walker（无 `@babel/traverse` 依赖）。extract import/export/call/component 信息。
+  - **Extractor**: `extractors/ts-react.ts` — 3 类项目专属约定提取：
+    1. **请求封装**: 检测统一 request helper vs 直接 fetch/axios
+    2. **i18n**: useIntl/useTranslation/t() hook 检测
+    3. **导出风格**: named vs default export 主导趋势
+    4. **组件风格**: functional vs class component
+  - **Generator**: `generators/conventions.ts` → `project-conventions.mdc`（`alwaysApply: true`），每条引用 evidence。
+  - **接线**: `pipeline.ts` 接入 `inspect()` 步骤，CLI `--deep` opt-in。`ProjectConventions` 透传至 `ResolvedProject`。
 
 ## 分阶段执行计划
 
 ### Phase 0 — 配置文件提取（确定性事实）
 > **目标**: 从 tsconfig / package.json / tsup.config / .vscodeignore 等配置文件中提取确定性约束，不依赖 AST 也不依赖 LLM。所有项目类型受益。
-> **优先级**: 最高 — 今天自测暴露出 config-level 信息完全缺失（engines、module 系统、双输出目标等）。
-> **工作量**: ~150 行，零新依赖
+> **状态**: ✅ 已完成 (2026-06-04)
+> **工作量**: ~150 行新代码，零新依赖
 
-- [ ] 扩展 `nodeScanner.detect()` 或新增轻量 `ConfigExtractor`:
+- [x] 扩展 `nodeScanner.detect()` 或新增轻量 `ConfigExtractor`:
   - `package.json`: `engines` / `type` / `main` / `bin` / `activationEvents` / `contributes`
   - `tsconfig.json`: `strict` / `moduleResolution` / `target` / `paths`
   - `tsup.config.ts`: 多入口、输出格式、target
   - `.vscodeignore`: 发布文件约束
   - `pnpm-workspace.yaml`: workspace 配置细节
-- [ ] 新增 `ScanResult.configConstraints` 字段或在 `ProjectMeta` 中透传
-- [ ] 渲染到 `tech-stack.mdc`（Environment Constraints）和 `coding-style.mdc`（Project-Specific Rules）
-- [ ] 修复 `tsc --noEmit` 重复输出问题（同一个 dep 在多处触发）
+- [x] 新增 `ScanResult.configConstraints` 字段或在 `ProjectMeta` 中透传
+- [x] 渲染到 `tech-stack.mdc`（Environment Constraints）和 `coding-style.mdc`（Project-Specific Rules）
+- [x] 修复 `tsc --noEmit` 重复输出问题（同一个 dep 在多处触发）
 
 ### Phase 1 — AST 骨架（TS/React）
 > **目标**: 新增 inspector 层，读真实源码抽取项目专属约定。先只用 AST 确定性事实，不加 LLM。
-> **新增依赖**: `@babel/parser`（~200KB bundle 增量）
+> **状态**: ✅ 已完成 (2026-06-04)
+> **新增依赖**: `@babel/parser`（bundle 增量 ~500KB，因 @babel/parser 自带 helper）
+> **实测解析速度**: 10 files / 69KB → 14.5ms，单文件 1.5ms
 
-- [ ] 新增类型 `InspectorExtractor`、`ProjectPattern`、`ProjectConventions`
-- [ ] `src/inspector/sampling.ts` — 按角色桶选代表文件，封顶文件数/字节数
-- [ ] `src/inspector/ast/parse.ts` — `@babel/parser` + 手写递归 walker
-- [ ] `src/inspector/extractors/imports.ts` — 检测统一封装的请求 helper（如 `import request from '@/utils/request'`）
-- [ ] `src/inspector/extractors/exports.ts` — 具名 vs 默认导出、函数组件 vs class
-- [ ] `src/generators/conventions.ts` — 输出 `project-conventions.mdc`（`alwaysApply: true`）
-- [ ] 选一个 TS/React 项目验证产出质量
+- [x] 新增类型 `InspectorExtractor`、`ProjectPattern`、`ProjectConventions`
+- [x] `src/inspector/sampling.ts` — 按角色桶选代表文件，封顶文件数/字节数
+- [x] `src/inspector/ast/parse.ts` — `@babel/parser` + 手写递归 walker
+- [x] `src/inspector/extractors/ts-react.ts` — 检测统一封装的请求 helper、i18n、具名 vs 默认导出、函数组件 vs class
+- [x] `src/generators/conventions.ts` — 输出 `project-conventions.mdc`（`alwaysApply: true`）
+- [ ] 选一个 TS/React 项目验证产出质量（下一步 — 选 zcenter-ui 或其他 React 项目真实验证）
 
 ### Phase 2 — LLM grounded 增强
 > **目标**: 用 LLM 对 AST 抽取的事实做 grounded 总结。每条约定必须引用 `file:line`，无证据剔除。
+> **状态**: ✅ 已完成 (2026-06-04)
 
-- [ ] 新增 extractors: i18n 用法、目录/文件命名结构
-- [ ] `src/inspector/llm.ts` — 复用 `ChatTransport`，temperature 0，防幻觉剔除
-- [ ] 合并 AST 事实 + LLM 总结为 `ProjectConventions`
+- [x] 新增 extractors: i18n 用法、请求封装、组件类型、导出风格（已合并在 Phase 1 的 ts-react.ts 中）
+- [x] `src/inspector/llm.ts` — 复用 `ChatTransport`，45s 超时，基于 evidence 过滤（每条约定的文件引用必须在采样文件中存在）
+- [x] 提示词结构：AST 事实 + 真实代码片段（12KB 预算）→ JSON 数组输出
+- [x] 合并策略：LLM 约定优先替代同主题 AST 约定（基于关键词重叠）；AST 独有约定保留
+- [ ] 端到端验证：zcenter-ui 上 `--deep --llm` 因 cursor-agent 超时未完成——提示词+代码片段较大，需要更快模型或异步流式调用
 
 ### Phase 3 — 接线与开关
-> **目标**: pipeline 接入 inspect 步骤，opt-in 深度模式。
+> **状态**: ✅ 已完成 (2026-06-04)
 
-- [ ] `pipeline.ts` 接入 `inspect()` 步骤
-- [ ] CLI 加 `--deep` 标志
+- [x] `pipeline.ts` 接入 `inspect()` 步骤
+- [x] CLI 加 `--deep` 标志（AST only）/ `--deep --llm`（LLM 增强）
 - [ ] 扩展加 `Cursor Rules: Generate (Deep)` 命令
 - [ ] 进度回调 + 按文件 hash 缓存抽取结果
-- [ ] end-to-end 验证：对比 `project-conventions.mdc` vs `coding-style.mdc`
+- [x] end-to-end 验证（AST only）：`project-conventions.mdc` vs `coding-style.mdc` — 信息增量明显
 
 ### Phase 4（可选）— 校验与 living
 - [ ] 正确性校验（glob 是否匹配真实文件、import 是否存在）

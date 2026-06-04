@@ -15,7 +15,7 @@ function empty(): ScanResult {
     languages: [], packageManagers: [], monorepo: null,
     srcDir: null, ci: null, containerized: false,
     deps: [], subProjects: [], scripts: {},
-    config: { tsStrict: false, isVscodeExtension: false },
+    config: { tsStrict: false, isVscodeExtension: false, hasVscodeignore: false, tsupConfig: { exists: false, entries: [], formats: [] } },
   }
 }
 
@@ -50,7 +50,10 @@ function mergePluginResult(acc: ScanResult, pr: ScannerPluginResult) {
     if (!acc.config.tsStrict && c.tsStrict) acc.config.tsStrict = c.tsStrict
     if (!acc.config.tsModuleResolution && c.tsModuleResolution) acc.config.tsModuleResolution = c.tsModuleResolution
     if (!acc.config.tsTarget && c.tsTarget) acc.config.tsTarget = c.tsTarget
+    if (!acc.config.tsconfigPaths && c.tsconfigPaths) acc.config.tsconfigPaths = c.tsconfigPaths
     if (!acc.config.isVscodeExtension && c.isVscodeExtension) acc.config.isVscodeExtension = c.isVscodeExtension
+    if (!acc.config.hasVscodeignore && c.hasVscodeignore) acc.config.hasVscodeignore = c.hasVscodeignore
+    if (!acc.config.tsupConfig.exists && c.tsupConfig.exists) acc.config.tsupConfig = c.tsupConfig
   }
 }
 

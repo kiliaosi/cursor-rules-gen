@@ -70,8 +70,22 @@ export const stackGenerator: RuleGenerator = {
     if (ec.tsTarget) {
       envLines.push(`- **TypeScript target**: \`${ec.tsTarget}\``)
     }
+    if (ec.tsconfigPaths && Object.keys(ec.tsconfigPaths).length > 0) {
+      const aliases = Object.entries(ec.tsconfigPaths)
+        .map(([k, v]) => `\`${k}\` → ${v.join(', ')}`)
+        .join('; ')
+      envLines.push(`- **Path Aliases**: ${aliases}`)
+    }
+    if (ec.tsupConfig.exists) {
+      const parts: string[] = []
+      if (ec.tsupConfig.entries.length > 0) parts.push(`entries: ${ec.tsupConfig.entries.join(', ')}`)
+      if (ec.tsupConfig.formats.length > 0) parts.push(`format: ${ec.tsupConfig.formats.join(', ')}`)
+      if (ec.tsupConfig.target) parts.push(`target: ${ec.tsupConfig.target}`)
+      envLines.push(`- **Build Tool**: tsup${parts.length > 0 ? ` (${parts.join('; ')})` : ''}`)
+    }
     if (ec.isVscodeExtension) {
-      envLines.push('- **Project Type**: VSCode / Cursor Extension')
+      const extra = ec.hasVscodeignore ? ' (published via .vscodeignore)' : ''
+      envLines.push(`- **Project Type**: VSCode / Cursor Extension${extra}`)
     }
     if (envLines.length > 0) {
       lines.push('## Environment Constraints', '')

@@ -31,6 +31,7 @@ interface CliArgs {
   force: boolean
   help: boolean
   listModels: boolean
+  deep: boolean
   resolve: ResolveOptions
 }
 
@@ -42,6 +43,7 @@ function parseArgs(argv: string[]): CliArgs {
     force: false,
     help: false,
     listModels: false,
+    deep: false,
     resolve: { mode: 'static' },
   }
 
@@ -57,6 +59,7 @@ function parseArgs(argv: string[]): CliArgs {
     else if (a === '--list-models') args.listModels = true
     else if (a === '--llm') args.resolve.mode = 'llm'
     else if (a === '--no-cache') args.resolve.noCache = true
+    else if (a === '--deep') args.deep = true
     else if (a === '--api-key') args.resolve.apiKey = next()
     else if (a === '--api-base') args.resolve.apiBase = next()
     else if (a === '--model') args.resolve.model = next()
@@ -86,6 +89,7 @@ function printHelp() {
     --diff            Show diff against existing rules (no write)
     --force, -f       Overwrite existing rule files
     --llm             Use LLM-powered knowledge resolution
+    --deep             Deep mode: read source code to extract project-specific conventions
     --model <name>    Model to use (Cursor CLI: 'auto' or a --list-models id)
     --list-models     List Cursor models available via cursor-agent, then exit
     --api-key <key>   API key for an external OpenAI-compatible LLM (or OPENAI_API_KEY)
@@ -260,7 +264,7 @@ async function main() {
     }
   }
 
-  const { scan, project, rules } = await run(projectRoot, { resolve: args.resolve, transport })
+  const { scan, project, rules } = await run(projectRoot, { resolve: args.resolve, transport, deep: args.deep })
 
   printResolved(project)
   reportIncremental(scan, projectRoot)

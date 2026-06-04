@@ -1,6 +1,6 @@
 import fs from 'node:fs'
 import path from 'node:path'
-import type { MonorepoInfo, PackageManager, ProjectConfig, RawDep, ScannerPlugin, ScannerPluginResult } from '../../types.js'
+import type { MonorepoInfo, PackageManager, ProjectConfig, TsupConfigInfo, RawDep, ScannerPlugin, ScannerPluginResult } from '../../types.js'
 
 function readPkg(root: string): Record<string, any> | null {
   try { return JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf-8')) } catch { return null }
@@ -70,7 +70,12 @@ function detectPackageManager(root: string): PackageManager {
 }
 
 function detectConfig(root: string, pkg: Record<string, any>): ProjectConfig {
-  const config: ProjectConfig = { tsStrict: false, isVscodeExtension: false }
+  const config: ProjectConfig = {
+    tsStrict: false,
+    isVscodeExtension: false,
+    hasVscodeignore: false,
+    tsupConfig: { exists: false, entries: [], formats: [] },
+  }
 
   // --- package.json ---
   if (pkg.engines && typeof pkg.engines === 'object') {
@@ -95,10 +100,56 @@ function detectConfig(root: string, pkg: Record<string, any>): ProjectConfig {
       config.tsStrict = co.strict === true
       if (typeof co.moduleResolution === 'string') config.tsModuleResolution = co.moduleResolution
       if (typeof co.target === 'string') config.tsTarget = co.target
+      if (co.paths && typeof co.paths === 'object') {
+        config.tsconfigPaths = {}
+        for (const [k, v] of Object.entries(co.paths as Record<string, unknown>)) {
+          if (Array.isArray(v)) config.tsconfigPaths[k] = v.map(String)
+        }
+      }
     }
   } catch { /* no tsconfig — leave defaults */ }
 
+  // --- tsup.config.ts ---
+  config.tsupConfig = detectTsupConfig(root)
+
+  // --- .vscodeignore ---
+  config.hasVscodeignore = fs.existsSync(path.join(root, '.vscodeignore'))
+
   return config
+}
+
+function detectTsupConfig(root: string): TsupConfigInfo {
+  const cfg: TsupConfigInfo = { exists: false, entries: [], formats: [] }
+  const cfgPath = path.join(root, 'tsup.config.ts')
+  if (!fs.existsSync(cfgPath)) return cfg
+
+  cfg.exists = true
+  try {
+    const raw = fs.readFileSync(cfgPath, 'utf-8')
+
+    const keys = new Set<string>()
+    for (const m of raw.matchAll(/entry\s*:\s*\{([^}]+)\}/g)) {
+      const entryKeys = m[1].match(/(\w+)\s*:/g)
+      if (entryKeys) {
+        for (const k of entryKeys) keys.add(k.replace(/\s*:\s*$/, ''))
+      }
+    }
+    cfg.entries = [...keys]
+
+    const formats = new Set<string>()
+    for (const m of raw.matchAll(/format\s*:\s*\[([^\]]+)\]/g)) {
+      for (const s of m[1].split(',')) {
+        const fmt = s.trim().replace(/['"]/g, '')
+        if (fmt) formats.add(fmt)
+      }
+    }
+    cfg.formats = [...formats]
+
+    const tgtMatch = raw.match(/target\s*:\s*['"]([^'"]+)['"]/)
+    if (tgtMatch) cfg.target = tgtMatch[1]
+  } catch { /* unparseable tsup config */ }
+
+  return cfg
 }
 
 export const nodeScanner: ScannerPlugin = {

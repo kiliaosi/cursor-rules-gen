@@ -72,6 +72,16 @@ export const codingStyleGenerator: RuleGenerator = {
       const esmIdx = configRules.findIndex(r => r.includes('.js` extensions'))
       if (esmIdx >= 0) configRules.splice(esmIdx, 1)
     }
+    if (ec.tsconfigPaths && Object.keys(ec.tsconfigPaths).length > 0) {
+      const aliases = Object.keys(ec.tsconfigPaths).join(', ')
+      configRules.push(`- **Path aliases in use**: ${aliases} — use these aliases instead of relative imports across modules.`)
+    }
+    if (ec.isVscodeExtension && ec.hasVscodeignore) {
+      configRules.push('- **Extension project** — published files are controlled by `.vscodeignore`. Do not add new files to the `.vsix` without verifying they are not excluded.')
+    }
+    if (ec.tsupConfig.exists && ec.tsupConfig.entries.length > 1) {
+      configRules.push(`- **Multi-entry build (tsup)**: this project produces ${ec.tsupConfig.entries.length} outputs (${ec.tsupConfig.entries.join(', ')}). New entry modules must be registered in \`tsup.config.ts\`.`)
+    }
     if (configRules.length > 0) {
       lines.push('## Project-Specific Constraints', '')
       lines.push(...configRules)
