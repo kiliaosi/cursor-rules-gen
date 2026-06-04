@@ -3,6 +3,7 @@ import path from 'node:path'
 import { scan } from './scanner/index.js'
 import { createResolver, selectTransport, type KnowledgeProvider } from './resolver/index.js'
 import type { ChatTransport } from './resolver/llm.js'
+import { skillsProvider } from './resolver/skills-provider.js'
 import { generateRules } from './generators/index.js'
 import { writeManifest } from './manifest.js'
 import type { ResolveOptions, ResolvedProject, RuleFile, ScanResult } from './types.js'
@@ -38,6 +39,14 @@ export async function run(projectRoot: string, options: RunOptions = {}): Promis
   const resolveOptions = options.resolve ?? { mode: 'static' }
   const scanResult = scan(projectRoot)
 
+  // Discover Agent Skill files (SKILL.md) from installed node_modules.
+  // Always placed at the front of the chain — library maintainers' own
+  // knowledge takes priority over static tables, cache, and LLM.
+  const skillProv = skillsProvider(projectRoot)
+  const extraProviders = options.extraProviders
+    ? [skillProv, ...options.extraProviders]
+    : [skillProv]
+
   // In LLM mode, auto-select a transport (Cursor CLI → HTTP) unless caller
   // supplied one or injected its own providers.
   let transport = options.transport
@@ -46,9 +55,10 @@ export async function run(projectRoot: string, options: RunOptions = {}): Promis
   }
 
   const resolver = createResolver(resolveOptions, {
-    extraProviders: options.extraProviders,
+    extraProviders,
     transport,
     onLlmProgress: options.onLlmProgress,
+    callerProvidedExtra: options.extraProviders !== undefined,
   })
   const project = await resolver.resolve(scanResult, readProjectName(projectRoot), projectRoot)
   const rules = generateRules(project)

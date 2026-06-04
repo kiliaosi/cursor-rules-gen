@@ -1,6 +1,6 @@
 import fs from 'node:fs'
 import path from 'node:path'
-import type { MonorepoInfo, PackageManager, RawDep, ScannerPlugin, ScannerPluginResult } from '../../types.js'
+import type { MonorepoInfo, PackageManager, ProjectConfig, RawDep, ScannerPlugin, ScannerPluginResult } from '../../types.js'
 
 function readPkg(root: string): Record<string, any> | null {
   try { return JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf-8')) } catch { return null }
@@ -69,6 +69,38 @@ function detectPackageManager(root: string): PackageManager {
   return 'unknown'
 }
 
+function detectConfig(root: string, pkg: Record<string, any>): ProjectConfig {
+  const config: ProjectConfig = { tsStrict: false, isVscodeExtension: false }
+
+  // --- package.json ---
+  if (pkg.engines && typeof pkg.engines === 'object') {
+    config.engines = {}
+    for (const [k, v] of Object.entries(pkg.engines)) {
+      if (typeof v === 'string') config.engines[k] = v
+    }
+  }
+  if (pkg.type === 'module' || pkg.type === 'commonjs') {
+    config.packageType = pkg.type
+  }
+  if (pkg.activationEvents || pkg.contributes) {
+    config.isVscodeExtension = true
+  }
+
+  // --- tsconfig.json ---
+  try {
+    const raw = fs.readFileSync(path.join(root, 'tsconfig.json'), 'utf-8')
+    const tsconfig = JSON.parse(raw) as { compilerOptions?: Record<string, unknown> }
+    const co = tsconfig.compilerOptions
+    if (co) {
+      config.tsStrict = co.strict === true
+      if (typeof co.moduleResolution === 'string') config.tsModuleResolution = co.moduleResolution
+      if (typeof co.target === 'string') config.tsTarget = co.target
+    }
+  } catch { /* no tsconfig — leave defaults */ }
+
+  return config
+}
+
 export const nodeScanner: ScannerPlugin = {
   name: 'node',
 
@@ -109,6 +141,7 @@ export const nodeScanner: ScannerPlugin = {
       packageManagers: pm !== 'unknown' ? [pm] : [],
       monorepo: detectMonorepo(root, pkg, rawDeps),
       scripts,
+      config: detectConfig(root, pkg),
     }
   },
 }

@@ -135,7 +135,7 @@ export class CursorCliTransport implements ChatTransport {
     const started = Date.now()
     const stdout = await runAgent(
       this.bin,
-      ['-p', '--output-format', 'json', '--force', '--model', this.model, prompt],
+      ['-p', '--output-format', 'json', '-f', '--model', this.model, prompt],
       this.timeoutMs,
     )
     this.log?.(`← cursor-agent responded in ${Date.now() - started}ms`)

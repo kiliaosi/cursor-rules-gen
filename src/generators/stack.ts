@@ -53,6 +53,32 @@ export const stackGenerator: RuleGenerator = {
     if (meta.containerized) lines.push('- **Containerized**: Docker')
     lines.push('')
 
+    // --- Environment constraints (config facts) ---
+    const ec = meta.config
+    const envLines: string[] = []
+    if (ec.engines && Object.keys(ec.engines).length > 0) {
+      for (const [k, v] of Object.entries(ec.engines)) {
+        envLines.push(`- **${k}**: ${v}`)
+      }
+    }
+    if (ec.packageType) {
+      envLines.push(`- **Module System**: ${ec.packageType === 'module' ? 'ESM' : 'CommonJS'}`)
+    }
+    if (ec.tsModuleResolution) {
+      envLines.push(`- **TypeScript module resolution**: \`${ec.tsModuleResolution}\``)
+    }
+    if (ec.tsTarget) {
+      envLines.push(`- **TypeScript target**: \`${ec.tsTarget}\``)
+    }
+    if (ec.isVscodeExtension) {
+      envLines.push('- **Project Type**: VSCode / Cursor Extension')
+    }
+    if (envLines.length > 0) {
+      lines.push('## Environment Constraints', '')
+      lines.push(...envLines)
+      lines.push('')
+    }
+
     // --- Library inventory grouped by category ---
     // Skip 'language' here — already rendered as project meta above.
     for (const [label, group] of groupByCategory(libs)) {

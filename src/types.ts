@@ -50,6 +50,25 @@ export interface LibKnowledge {
 }
 
 // ----------------------------------------------------------------------------
+// Config facts — deterministic, read from config files (Phase 0)
+// ----------------------------------------------------------------------------
+
+export interface ProjectConfig {
+  /** From package.json engines (e.g. { node: ">=18", vscode: "^1.90.0" }) */
+  engines?: Record<string, string>
+  /** From package.json "type" field */
+  packageType?: 'module' | 'commonjs'
+  /** tsconfig compilerOptions.strict */
+  tsStrict: boolean
+  /** tsconfig compilerOptions.moduleResolution */
+  tsModuleResolution?: string
+  /** tsconfig compilerOptions.target */
+  tsTarget?: string
+  /** Has activationEvents + contributes (VSCode extension) */
+  isVscodeExtension: boolean
+}
+
+// ----------------------------------------------------------------------------
 // Scanner output
 // ----------------------------------------------------------------------------
 
@@ -84,6 +103,8 @@ export interface ScanResult {
   subProjects: ScannedSubProject[]
   /** Root-level run scripts (e.g. package.json#scripts), name → command. */
   scripts: Record<string, string>
+  /** Config facts merged from ecosystem plugins. */
+  config: ProjectConfig
 }
 
 // ----------------------------------------------------------------------------
@@ -99,6 +120,8 @@ export interface ScannerPluginResult {
   containerized?: boolean
   /** Run scripts surfaced by this ecosystem (name → command). */
   scripts?: Record<string, string>
+  /** Deterministic config facts (engines, tsconfig, etc.). */
+  config?: ProjectConfig
 }
 
 export interface ScannerPlugin {
@@ -130,6 +153,8 @@ export interface ProjectMeta {
   subProjects: ResolvedSubProject[]
   /** Root-level run scripts (name → command). */
   scripts: Record<string, string>
+  /** Deterministic config facts from the project's config files. */
+  config: ProjectConfig
 }
 
 export interface ResolvedProject {

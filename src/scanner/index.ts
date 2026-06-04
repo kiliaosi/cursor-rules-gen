@@ -15,6 +15,7 @@ function empty(): ScanResult {
     languages: [], packageManagers: [], monorepo: null,
     srcDir: null, ci: null, containerized: false,
     deps: [], subProjects: [], scripts: {},
+    config: { tsStrict: false, isVscodeExtension: false },
   }
 }
 
@@ -40,6 +41,17 @@ function mergePluginResult(acc: ScanResult, pr: ScannerPluginResult) {
   if (pr.ci && !acc.ci) acc.ci = pr.ci
   if (pr.containerized && !acc.containerized) acc.containerized = pr.containerized
   if (pr.scripts) for (const [k, v] of Object.entries(pr.scripts)) acc.scripts[k] ??= v
+
+  // Merge config facts — first plugin that sets a field wins.
+  if (pr.config) {
+    const c = pr.config
+    if (!acc.config.engines && c.engines) acc.config.engines = c.engines
+    if (!acc.config.packageType && c.packageType) acc.config.packageType = c.packageType
+    if (!acc.config.tsStrict && c.tsStrict) acc.config.tsStrict = c.tsStrict
+    if (!acc.config.tsModuleResolution && c.tsModuleResolution) acc.config.tsModuleResolution = c.tsModuleResolution
+    if (!acc.config.tsTarget && c.tsTarget) acc.config.tsTarget = c.tsTarget
+    if (!acc.config.isVscodeExtension && c.isVscodeExtension) acc.config.isVscodeExtension = c.isVscodeExtension
+  }
 }
 
 function detectSrcDir(root: string): string | null {

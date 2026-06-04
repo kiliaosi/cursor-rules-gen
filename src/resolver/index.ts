@@ -146,6 +146,7 @@ export class KnowledgeResolver {
       ci: scan.ci,
       containerized: scan.containerized,
       scripts: scan.scripts,
+      config: scan.config,
       subProjects: scan.subProjects.map(sp => ({
         name: sp.name,
         path: sp.path,
@@ -170,6 +171,11 @@ export interface CreateResolverDeps {
   transport?: ChatTransport | null
   /** LLM progress callback: (resolvedDepCount, totalDepCount). */
   onLlmProgress?: (done: number, total: number) => void
+  /**
+   * Whether the caller passed its own extraProviders (not pipeline-injected
+   * ones like skillsProvider). Used to decide whether to warn on LLM fallback.
+   */
+  callerProvidedExtra?: boolean
 }
 
 /**
@@ -191,23 +197,23 @@ export function createResolver(
   if (options.mode === 'llm') {
     const transport = deps.transport !== undefined ? deps.transport : buildHttpTransport(options)
     if (transport) {
-      // Order: cache (instant) → static (known libs, free/fast) → LLM (only the
-      // remaining unknowns). This keeps large projects fast and limits model
-      // calls to the long tail instead of every dependency.
+      // Order: cache (instant) → LLM (current knowledge, cached on success)
+      // → static (offline fallback). LLM answers first so stale static
+      // entries are overridden; once cached, subsequent runs skip the LLM.
       const llm = llmProvider({ transport, onError: warnLlm, onProgress: deps.onLlmProgress })
       const cache = options.noCache ? null : new KnowledgeCache()
       if (cache) {
         chain.push(cacheReadProvider(cache))
-        chain.push(...staticProviders)
         chain.push(withCacheWrite(cache, llm))
+        chain.push(...staticProviders)
         onComplete = () => cache.flush()
       } else {
-        chain.push(...staticProviders)
         chain.push(llm)
+        chain.push(...staticProviders)
       }
       return new KnowledgeResolver(chain, onComplete)
     }
-    if (deps.extraProviders === undefined || deps.extraProviders.length === 0) {
+    if (!deps.callerProvidedExtra) {
       warnLlm(new Error('LLM mode requested but no model is available; falling back to static knowledge.'))
     }
   }

@@ -57,6 +57,27 @@ export const codingStyleGenerator: RuleGenerator = {
     }))
     lines.push('# Coding Style & Conventions', '')
 
+    // --- Project-specific rules from config facts ---
+    const configRules: string[] = []
+    const ec = project.meta.config
+    if (ec.packageType === 'module') {
+      configRules.push('- **ESM imports require `.js` extensions** — use `import { foo } from "./bar.js"` even for `.ts` files.')
+    }
+    if (ec.tsStrict) {
+      configRules.push('- **TypeScript strict mode is enabled** — avoid `any`; prefer `unknown` for truly unknown types.')
+    }
+    if (ec.tsModuleResolution === 'bundler') {
+      configRules.push('- **moduleResolution is `bundler`** — no `.js` extensions needed in imports (handled by tsup/rsbuild).')
+      // Override the ESM rule above — bundler mode does NOT need .js extensions
+      const esmIdx = configRules.findIndex(r => r.includes('.js` extensions'))
+      if (esmIdx >= 0) configRules.splice(esmIdx, 1)
+    }
+    if (configRules.length > 0) {
+      lines.push('## Project-Specific Constraints', '')
+      lines.push(...configRules)
+      lines.push('')
+    }
+
     for (const [label, group] of groupByCategory(project.libs)) {
       lines.push(...renderConventionsSection(label, group))
     }

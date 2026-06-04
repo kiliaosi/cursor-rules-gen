@@ -102,9 +102,12 @@ export const workflowGenerator: RuleGenerator = {
       lines.push(...renderCommandsSection(label, group))
     }
 
-    // Languages last — generic compile/run commands.
+    // Languages last — but skip if already covered by Dev Tools (avoids
+    // duplicate `tsc --noEmit` entries). Language-level commands are generic
+    // compile/run hints; dev-tool entries are more specific.
     const langs = groups.find(([l]) => l === 'Languages')
-    if (langs) lines.push(...renderCommandsSection('Languages', langs[1]))
+    const devtools = groups.find(([l]) => l === 'Dev Tools')
+    if (langs && !devtools) lines.push(...renderCommandsSection('Languages', langs[1]))
 
     lines.push(...GIT_CONVENTIONS)
 
